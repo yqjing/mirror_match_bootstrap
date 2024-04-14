@@ -1,0 +1,266 @@
+---
+title: "Stat 854 Project: Mirror-match Bootstrap"
+author: "..."
+date: "April 14 2024"
+output: pdf_document
+papersize: a4
+urlcolor: blue
+fontsize: 11pt    
+fontfamily: mathpple
+bibliography: references.bib
+---
+
+
+
+\newcommand\bx{\boldsymbol x}
+\newcommand\btheta{\boldsymbol \theta}
+\newcommand\bSigma{\boldsymbol \Sigma}
+\newcommand\bmu{\boldsymbol \mu}
+\newcommand\expect{\text{E}}
+\newcommand\prob{\text{Pr}}
+\newcommand\bI{\boldsymbol I}
+\newcommand{\bm}[1]{\boldsymbol{\mathbf{#1}}}
+
+
+# Introduction
+
+# Method
+
+# Experiments
+
+# Related Works
+
+# Conclusion
+
+
+
+\newpage
+# Appendix
+
+## 1. First, we pre-process the syc.txt in SAS, where we delete the missing value in numarr and keep only two column variables 'stratum' and 'numarr'.  
+In addition, PROC FREQ is used to generate frequency counts for the stratum variable.   
+After that, the processed dataset is exported to 'syc_post.txt'.
+
+## SAS code 
+```{r echo=FALSE, fig.align='left', out.width = "80%"}
+knitr::include_graphics("figures/sas_1.pdf")
+
+``` 
+
+## SAS output
+```{r echo=FALSE, fig.align='center', out.width = "80%"}
+knitr::include_graphics("figures/output_1.png")
+
+``` 
+
+## 2. Second, we read in the data in R and compute sampling weights.
+```{r, eval=FALSE}
+# Read in the Survey of Youth in Custody
+syc <- readr::read_csv(
+  file = "data/syc_post.csv", # Tell it where the file is
+  col_types = "nn", # Tell it that there are two columns, and they are "numeric" (n)
+)
+
+# glimpse the read data set
+dplyr::glimpse(syc)
+```
+
+
+
+
+
+<!-- # 1. PCA-based clustering computational time {#sec-citations-1} -->
+<!-- ```{r, eval=FALSE} -->
+<!-- rm(list=ls()) -->
+<!-- library("corpcor") -->
+<!-- now <- Sys.time() -->
+
+<!-- load("mnist.rda") -->
+
+<!-- # data matrix X -->
+<!-- X = mnistTest$x -->
+
+<!-- # True label vector Y -->
+<!-- Y = mnistTest$y -->
+
+<!-- # center the data matrix X -->
+<!-- X <- sweep(X, 2, colMeans(X))    -->
+
+<!-- # conduct SVD to centered data matrix X -->
+<!-- SVD_time_fast = system.time(SVD_pca <- fast.svd(X)) -->
+<!-- paste('Fast SVD time (s):', SVD_time_fast[3]) -->
+
+<!-- # eigenvector matrix of covariance matrix Sigma m*m -->
+<!-- U = SVD_pca$v -->
+
+<!-- # compute principle components T for data matrix X n*m -->
+<!-- projection_time = system.time(T_pca <- X %*% U) -->
+<!-- paste('projection time (s):', projection_time[3]) -->
+
+<!-- # implement K-means to cluster the data using the first 20 PCs -->
+<!-- # PC: the number of PCs used for clustering -->
+<!-- PC = 20 -->
+<!-- kmeans_time = system.time(kmeans_out10 <- kmeans(T_pca[,1:PC], 10)) -->
+<!-- paste('kmeans time (s):', kmeans_time[3]) -->
+
+<!-- # Running time -->
+<!-- res <- difftime(Sys.time(), now) -->
+<!-- paste("Time for PCA-based clustering to run (s):", res) -->
+
+<!-- # calculate AC (accuracy) of clustering -->
+<!-- gnd = c(Y)-1 -->
+<!-- class = cbind(gnd, kmeans_out10$cluster) -->
+<!-- write.csv(class,  -->
+<!--           file= -->
+<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/MATLAB/freefile/M-files folder/class.csv") -->
+<!-- ``` -->
+
+<!-- # 2. PCA based k-means accuracy test -->
+<!-- ```{r, eval= FALSE} -->
+<!-- # read output from MATLAB -->
+<!-- class_out <- read.csv( -->
+<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/class_out.csv", header = TRUE) -->
+<!-- class_out = as.matrix(class_out) -->
+
+<!-- # visualize the accuracy of PCA-based clustering. -->
+<!-- table_2 = table(class_out[,1], class_out[,2]) -->
+<!-- colnames(table_2) = c('Res0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
+<!-- rownames(table_2) = c('Gnd0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
+<!-- table_2 -->
+
+<!-- # compute the accuracy -->
+<!-- bestMap = as.matrix(table_2) -->
+<!-- AC_2 = sum(diag(bestMap)) / sum(bestMap) -->
+<!-- paste('Accuracy (%):', AC_2*100) -->
+<!-- ``` -->
+
+<!-- # 3. Spectral clustering computational time {#sec-citations-3} -->
+<!-- ```{r, eval=FALSE} -->
+<!-- rm(list=ls()) -->
+<!-- library('pracma') -->
+<!-- library('Matrix') -->
+<!-- library('sparsesvd') -->
+
+<!-- now <- Sys.time() -->
+<!-- load("mnist.rda") -->
+
+<!-- # data matrix X -->
+<!-- X = mnistTest$x -->
+
+<!-- # True label vector Y -->
+<!-- Y = mnistTest$y -->
+
+<!-- # center the data matrix X -->
+<!-- X <- sweep(X, 2, colMeans(X)) -->
+
+<!-- # Set and parse parameters -->
+<!-- # landmark points p (default=200) -->
+<!-- p = 200 -->
+
+<!-- # number of nearest landmarks (default=2) -->
+<!-- r = 2 -->
+
+<!-- # produce p landmark points (basis vectors) using random selection -->
+<!-- # landmarks_r = X[sample(nrow(X), size=p, replace=FALSE),] -->
+
+<!-- # alternatively, produce p landmark points using k-means -->
+<!-- kmeans_time_p = system.time(kmeans_out_p <- kmeans(X, p)) -->
+<!-- paste('Constructing U with k-means (s):', kmeans_time_p[3]) -->
+<!-- landmarks_k = kmeans_out_p$centers -->
+
+<!-- # calculate the Euclidean distance matrix -->
+<!-- Euclidean_time = system.time(D <- distmat(X, landmarks_k)) -->
+<!-- paste('Constructing D Euclidean distance matrix (s):',   -->
+<!--       Euclidean_time[3]) -->
+
+<!-- # estimate bandwidth h in the kernel function K.  -->
+<!-- sigma = mean(D)  -->
+
+<!-- # construct the sparse representation matrix Z  -->
+<!-- dense = matrix(0, nrow=nrow(X), ncol=r)   -->
+<!-- idx = dense -->
+
+<!-- for (i in 1:r)  -->
+<!--   { -->
+<!--   dense[, i] = apply(D, 1, FUN = min) -->
+<!--   idx[, i] = t(max.col(-D, 'first')) -->
+<!--   temp = (idx[, i]-1)*nrow(X) + matrix(c(1:nrow(X)), nrow=nrow(X)) -->
+<!--   D[temp] = 1e100 -->
+<!--   } -->
+
+<!-- dense = exp(-dense/(2*sigma^2)) -->
+<!-- dense = sweep(dense, 1, rowSums(dense), '/') -->
+<!-- Gidx = do.call(cbind, replicate(r, matrix(c(1:nrow(X)), nrow=nrow(X)), simplify=FALSE)) -->
+<!-- Gjdx = idx -->
+<!-- Z = sparseMatrix(i=c(Gidx), j=c(Gjdx), x=c(dense), dims = c(nrow(X), p)) -->
+
+<!-- # transpose Z to get order p*n -->
+<!-- Z = t(Z) -->
+
+<!-- # compute the inverse sqrt matrix D^(-1/2) -->
+<!-- D_isqrt = .sparseDiagonal(x=rowSums(Z)^(-1/2)) -->
+<!-- Z_hat = D_isqrt %*% Z -->
+
+<!-- # sparse singular value decomposition of Z_hat -->
+<!-- # we use sparsesvd -->
+<!-- SVD_time_sparse = system.time(SVD_spectral <- sparsesvd(Z_hat)) -->
+<!-- paste('sparse eigen-decomposition time (s):', SVD_time_sparse[3]) -->
+
+<!-- # find the first k eigenvectors -->
+<!-- Idc = SVD_spectral$v -->
+<!-- Idc = zapsmall(Idc) -->
+<!-- Idc = Idc[,c(2:11)] -->
+
+<!-- # normalize the rows of Indicators -->
+<!-- Idc = sweep(Idc, 1, sqrt(rowSums(Idc^2)), '/') -->
+
+<!-- # cluster the indicator matrix with k-means -->
+<!-- kmeans_out_spectral = kmeans(Idc, 10) -->
+
+<!-- res <- difftime(Sys.time(), now) -->
+<!-- paste("Time for spectral clustering to run:", res) -->
+
+<!-- # Accuracy test -->
+<!-- gnd = c(Y)-1 -->
+<!-- class = cbind(gnd, kmeans_out_spectral$cluster) -->
+<!-- write.csv(class,  -->
+<!--  file="/Users/jingyuqi/Documents/MATLAB&LaTeX/MATLAB/freefile/M-files folder/class.csv") -->
+<!-- ``` -->
+
+<!-- # 4. Spectral clustering accuracy test {#sec-citations-4} -->
+<!-- ```{r, eval=FALSE} -->
+<!-- # read output from MATLAB -->
+<!-- class_out <- read.csv( -->
+<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/class_out.csv", header = TRUE) -->
+<!-- class_out = as.matrix(class_out) -->
+
+<!-- # visualize the accuracy of PCA-based clustering -->
+<!-- table_4 = table(class_out[,1], class_out[,2]) -->
+<!-- colnames(table_4) = c('Res0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
+<!-- rownames(table_4) = c('Gnd0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
+<!-- table_4 -->
+
+<!-- # compute the accuracy -->
+<!-- bestMap = as.matrix(table_4) -->
+<!-- AC_2 = sum(diag(bestMap)) / sum(bestMap) -->
+<!-- paste('bestMap(%)', AC_2*100) -->
+<!-- ``` -->
+
+
+\newpage
+# References
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+

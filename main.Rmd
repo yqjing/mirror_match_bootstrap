@@ -37,214 +37,313 @@ bibliography: references.bib
 \newpage
 # Appendix
 
-## 1. First, we pre-process the syc.txt in SAS, where we delete the missing value in numarr and keep only two column variables 'stratum' and 'numarr'.  
+# 1. We pre-process the syc.txt in SAS, where 
++ we deal with missing values in the 8 variables mentioned in A2Q4 by setting missing values as '.'
++ we keep only the necessary columns, i.e. the 8 variables mentioned in A2Q4
++ sort the dataset by stratum in an ascending order
++ export a syc dataset called syc_sas.csv with 8 variables for calculation in SAS
++ export another syc dataset call syc_r.csv with 2 variables (stratum, finalwt) for computing bootstrap weight in R
+
 In addition, PROC FREQ is used to generate frequency counts for the stratum variable.   
-After that, the processed dataset is exported to 'syc_post.txt'.
+
 
 ## SAS code 
-```{r echo=FALSE, fig.align='left', out.width = "80%"}
+```{r echo=FALSE, fig.align='left', out.width = "100%"}
 knitr::include_graphics("figures/sas_1.pdf")
 
 ``` 
 
 ## SAS output
-```{r echo=FALSE, fig.align='center', out.width = "80%"}
-knitr::include_graphics("figures/output_1.png")
+```{r echo=FALSE, fig.align='center', out.width = "120%"}
+knitr::include_graphics("figures/sas_2.pdf")
 
 ``` 
 
-## 2. Second, we read in the data in R and compute sampling weights.
-```{r, eval=FALSE}
+# 2. We read in the syc in R and log the $N_h$ information provided in A2Q4
+```{r, eval=TRUE, echo=TRUE}
 # Read in the Survey of Youth in Custody
 syc <- readr::read_csv(
-  file = "data/syc_post.csv", # Tell it where the file is
+  file = "data/syc_r.csv", # Tell it where the file is
   col_types = "nn", # Tell it that there are two columns, and they are "numeric" (n)
 )
 
 # glimpse the read data set
 dplyr::glimpse(syc)
+
+# Read the stratum size provided in Assignment 2 Question 4, shape (16, 1)
+N_h_list = c(2724, 3192, 4107, 2705, 3504, 376, 56, 
+             528, 624, 520, 672, 384, 744, 847, 824, 1848)
+```
+# 3. We write the function for performing one mirror-match bootstrap for stratum h
+For $n_{h}^{\prime}$, we choose $n_{h}^{\prime} = f_n \times n_h$ advised by author in the paper [@sitter1992comparing], so that the first two moments of the distribution of the bootstrap estimate of $\bar{y}$ match the usual unbiased estimates of the first two moments of $\bar{y}$.  
+
+## Randomization of $n_h$
+For stratum $h$ in each bootstrap, the $n_{h}^{\prime}$ is a random variable with discrete distribution across \{$n_{h, floor}^{\prime}$, $n_{h, ceil}^{\prime}$ \} whose pmf is given below:
+$$
+Pr(n_{h}^{\prime} = n_{h, floor}^{\prime}) = n_{h, ceil}^{\prime} - n_{h}^{\prime} = p,
+$$
+and $Pr(n_{h}^{\prime} = n_{h, ceil}^{\prime})$ is:
+$$
+Pr(n_{h}^{\prime} = n_{h, ceil}^{\prime}) = 1 - p,
+$$
+where $n_{h, floor}^{\prime}$ is equal to `floor(n_h_prime)` in R; $n_{h, ceil}^{\prime}$ is equal to `ceiling(n_h_prime)` in R.  
+The randomization is done at the beginning of a bootstrap for each stratum $h$ independently and repeated at each bootstrap as described in the paper [@sitter1992resampling].  
+
+
+
+## Randomization of $k_h$
+For stratum $h$ in each bootstrap, given the value of $n_{h}^{\prime}$ obtained in the randomization above, the $k_h$ is a random variable with discrete distribution across \{$k_{h, floor}$, $k_{h, ceil}$\} whose pmf is described below:
+$$
+Pr(k_h = k_{h, floor}) = \frac{\bigg( \frac{1}{k_h} - \frac{1}{k_{h, ceil}}\bigg) }{\bigg( \frac{1}{k_{h, floor}} - \frac{1}{k_{h, ceil}} \bigg)} = p_h,
+$$
+and $Pr(k_h = k_{h, ceil})$ is:
+$$
+Pr(k_h = k_{h, ceil}) = 1 - p_h,
+$$
+where $k_{h, floor}$ is equal to `floor(k_h)` in R; $k_{h, ceil}$ is equal to `ceiling(k_h)` in R.  
+The randomization is done independently for each stratum $h$ and repeated at each bootstrap as described in the paper [@sitter1992resampling].  
+
+
+
+```{r, eval=TRUE, echo=TRUE}
+mirror_match_bootstrap_h = function(dataset, N_h_list, h)
+  # Perform one mirror-match bootstrap for stratum h
+  # parameters
+  # ---------
+  # 
+  # dataset : data.frame
+  #   dataset of shape (n, 2)
+  # N_h_list : vector
+  #   vector of shape (16, 1)
+  # h : int
+  #   stratum number
+  #
+  # return
+  # ------
+  #
+  # bootstrap_weights : vector
+  #   bootstrap weights for the sample units in the stratum (from 1 to n_h)
+  #   shape (n_h, 1)
+
+{
+  # get the stra_weights df, shape is (n_h, 2)
+  stra_weights_df = get_stratum(dataset, h)
+  # get the stra_weights vector, shape is (n_h, 1)
+  stra_weights = stra_weights_df$finalwt
+  # get n_h from the dimension of stra_weights_df
+  n_h = dim(stra_weights_df)[1]
+  # get N_h from the N_h_list
+  N_h = N_h_list[h]
+  # compute the n_h_prime using the formula n_{h}^{\prime} = f_n \times n_h
+  n_h_prime = n_h * (n_h / N_h)
+  # get random integer n_h_prime by applying random_n_h_prime if it is not integer
+  if (!n_h_prime %% 1 == 0)
+  {
+    n_h_prime = random_n_h_prime(n_h_prime, n_h)
+  }
+  # compute k_h
+  k_h = get_k_h(n_h, n_h_prime, N_h)
+  # create a vector of indices for the stra_weights, shape is (n_h, 1)
+  indices = seq(1, n_h)
+  # create a counter to count the number of times a index is selected, shape is (n_h, 1)
+  counter = rep(0, n_h)
+  # print information about the stratum h
+  # print(paste("The stratum is", h, "the n_h is", n_h, "the n_h_prime is", n_h_prime, "the k_h is", k_h))
+  
+  # carry out sample without replacement from indices (k_h times), sample size is n_h_prime
+  for (s in 1:k_h)
+  {
+    # sample without replacement
+    bootstrapsample = sample(indices, n_h_prime, replace = FALSE)
+    for (index in bootstrapsample)
+    {
+      # log the number of appearances of index of elements in stratum h in the bootstrapsample
+      counter[index] = counter[index] + 1
+    }
+  }
+  # calculate the bootstrap weights using stra_weights (n_h, 1) and counter (n_h, 1)
+  # apply element-wise multiplication of the two vectors
+  bootstrap_weights = counter * stra_weights
+  
+  # make sure the length of bootstrap_weights is n_h
+  if (length(bootstrap_weights) == n_h)
+  {
+    return(bootstrap_weights)
+  }
+  else
+  {
+    stop("bootstrap_weights does not have length n_h")
+  }
+  
+}
+
+get_stratum = function(dataset, h)  # get the weights of stratum h from the dataset
+{
+  # make sure stratum number is in the range of 1 to 16
+  if (h %in% seq(1, 16))
+  {
+    # get the weights of stratum h from the dataset
+    stra_weights_df = dataset[dataset$stratum == h, ]
+    return(stra_weights_df)
+  }
+  else
+  {
+    stop("Stratum number does not exist.")
+  }
+}
+
+get_k_h = function(n_h, n_h_prime, N_h)  # compute the k_h, the number of resamplings with replacement
+{
+  f_h = n_h / N_h  # compute f_h
+  f_h_star = n_h_prime / n_h  # compute f_h_star
+  k_h = (n_h * (1 - f_h_star)) / (n_h_prime * (1 - f_h))  # compute k_h using the formula
+  # apply the random_k_h function if k_h is not integer
+  
+  if (!k_h%%1 == 0)
+  {
+    k_h = random_k_h(k_h)
+  }
+  return(k_h)
+}
+
+random_n_h_prime = function(n_h_prime, n_h)  # randomization for k_h
+{
+  # make sure n_h_prime is in the proper range
+  if (n_h_prime >= 1 && n_h_prime < n_h)
+  {
+    # get k_h_floor and k_h_ceil
+    n_h_prime_floor = floor(n_h_prime)
+    n_h_prime_ceil = ceiling(n_h_prime)
+    
+    # get prob for n_h_prime_floor
+    # apply the formula in the paper
+    p_floor = n_h_prime_ceil - n_h_prime
+    # get prob for k_h_ceil
+    p_ceil = 1 - p_floor
+    
+    # get the random integer n_h_prime based on the p_floor and p_ceil
+    n_h_prime = sample(c(n_h_prime_floor, n_h_prime_ceil), 1, prob = c(p_floor, p_ceil))
+    return(n_h_prime)
+  }
+  else
+  {
+    # if n_h_prime is less than 1, assign it as 1
+    if (n_h_prime < 1)
+    {
+      n_h_prime = 1
+      return(n_h_prime)
+    }
+    else
+    {
+      stop(paste("n_h_prime must be larger than or equal to 1 and less than n_h, however got", n_h_prime))
+    }
+  }
+}
+
+random_k_h = function(k_h)  # randomization for k_h
+{
+  # make sure k_h is larger than 1
+  if (k_h >= 1)
+  {
+    # get k_h_floor and k_h_ceil
+    k_h_floor = floor(k_h)
+    k_h_ceil = ceiling(k_h)
+    
+    # get prob for k_h_floor
+    # apply the formula in the paper
+    p_floor = ((1 / k_h) - (1 / k_h_ceil)) / ((1 / k_h_floor) - (1 / k_h_ceil))
+    # get prob for k_h_ceil
+    p_ceil = 1 - p_floor
+    
+    # get the random integer k_h based on the p_floor and p_ceil
+    k_h = sample(c(k_h_floor, k_h_ceil), 1, prob = c(p_floor, p_ceil))
+    return(k_h)
+  }
+  else
+  {
+    stop("k_h must be larger than or equal to 1")
+  }
+}
+
+weights = mirror_match_bootstrap_h(syc, N_h_list, 3)
+weights
+
+```
+# 4. We perform one complete bootstrap for the sample of size $n$. Specifically, we perform bootstrap for all the 16 strata in the sample. 
+
+```{r, eval = TRUE, echo = TRUE}
+mirror_match_bootstrap_full = function(dataset, N_h_list, stratum_list = seq(1, 16))
+{
+  # Perform one full mirror-match bootstrap for 16 strata
+  # parameters
+  # ---------
+  # 
+  # dataset : data.frame
+  #   dataset of shape (n, 2)
+  # N_h_list : vector
+  #   vector of shape (16, 1)
+  # stratum_list : vector
+  #   list contatining all the stratum numbers
+  #   default is seq(1, 16)
+  #
+  # return
+  # ------
+  #
+  # bootstrap_weights : vector
+  #   bootstrap weights for the full sample of size n consisting of 16 strata
+  #   shape (n, 1)
+
+  # compute the sample size n
+  n = dim(dataset)[1]
+  # create an empty vector for storing bootstrap weights
+  bootstrap_weights_full = c()
+  for (h in stratum_list)
+  {
+    # obtain the bootstrap weights for stratum h by applying the function mirror_match_bootstrap_h
+    bootstrap_weights_h = mirror_match_bootstrap_h(dataset, N_h_list, h)
+    # concatenate the new bootstrap weights to the bootstrap_weights_full
+    bootstrap_weights_full = c(bootstrap_weights_full, bootstrap_weights_h)
+  }
+  
+  # make sure the length of bootstrap_weights_full be n
+  if (length(bootstrap_weights_full) == n)
+  {
+    return(bootstrap_weights_full)
+  }
+  else
+  {
+    stop("the length of bootstrap_weights_full must be n")
+  }
+}
+
+a = mirror_match_bootstrap_full(syc, N_h_list)
+dplyr::glimpse(a)
+
+
 ```
 
+# 5. Finally, we obtain the bootstrap weight matrix by repeating the full bootstrap B times. Bootstrap weight matrix has shape ($n$, B). 
+```{r, eval = TRUE, echo = TRUE}
+mirror_match_bootstrap_B = function(dataset, N_h_list, B = 100, stratum_list = seq(1, 16))
+{
+  stratum_vector = dataset$stratum
+  bootstrap_weights_matrix = stratum_vector
+  for (exp in 1:B)
+  {
+    bootstrap_weights_vector = mirror_match_bootstrap_full(dataset, N_h_list)
+    bootstrap_weights_matrix = cbind(bootstrap_weights_matrix, bootstrap_weights_vector)
+  }
+   bootstrap_weights_matrix = as.data.frame(bootstrap_weights_matrix)
+   names(bootstrap_weights_matrix) = c("stratum", paste0("w", 1:100))
+  return(bootstrap_weights_matrix)
+}
+
+m <- mirror_match_bootstrap_B(syc, N_h_list)
+dplyr::glimpse(m)
+write.csv(m, "data/bootstrap_weights_matrix.csv", row.names = FALSE)
 
 
-
-
-<!-- # 1. PCA-based clustering computational time {#sec-citations-1} -->
-<!-- ```{r, eval=FALSE} -->
-<!-- rm(list=ls()) -->
-<!-- library("corpcor") -->
-<!-- now <- Sys.time() -->
-
-<!-- load("mnist.rda") -->
-
-<!-- # data matrix X -->
-<!-- X = mnistTest$x -->
-
-<!-- # True label vector Y -->
-<!-- Y = mnistTest$y -->
-
-<!-- # center the data matrix X -->
-<!-- X <- sweep(X, 2, colMeans(X))    -->
-
-<!-- # conduct SVD to centered data matrix X -->
-<!-- SVD_time_fast = system.time(SVD_pca <- fast.svd(X)) -->
-<!-- paste('Fast SVD time (s):', SVD_time_fast[3]) -->
-
-<!-- # eigenvector matrix of covariance matrix Sigma m*m -->
-<!-- U = SVD_pca$v -->
-
-<!-- # compute principle components T for data matrix X n*m -->
-<!-- projection_time = system.time(T_pca <- X %*% U) -->
-<!-- paste('projection time (s):', projection_time[3]) -->
-
-<!-- # implement K-means to cluster the data using the first 20 PCs -->
-<!-- # PC: the number of PCs used for clustering -->
-<!-- PC = 20 -->
-<!-- kmeans_time = system.time(kmeans_out10 <- kmeans(T_pca[,1:PC], 10)) -->
-<!-- paste('kmeans time (s):', kmeans_time[3]) -->
-
-<!-- # Running time -->
-<!-- res <- difftime(Sys.time(), now) -->
-<!-- paste("Time for PCA-based clustering to run (s):", res) -->
-
-<!-- # calculate AC (accuracy) of clustering -->
-<!-- gnd = c(Y)-1 -->
-<!-- class = cbind(gnd, kmeans_out10$cluster) -->
-<!-- write.csv(class,  -->
-<!--           file= -->
-<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/MATLAB/freefile/M-files folder/class.csv") -->
-<!-- ``` -->
-
-<!-- # 2. PCA based k-means accuracy test -->
-<!-- ```{r, eval= FALSE} -->
-<!-- # read output from MATLAB -->
-<!-- class_out <- read.csv( -->
-<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/class_out.csv", header = TRUE) -->
-<!-- class_out = as.matrix(class_out) -->
-
-<!-- # visualize the accuracy of PCA-based clustering. -->
-<!-- table_2 = table(class_out[,1], class_out[,2]) -->
-<!-- colnames(table_2) = c('Res0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
-<!-- rownames(table_2) = c('Gnd0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
-<!-- table_2 -->
-
-<!-- # compute the accuracy -->
-<!-- bestMap = as.matrix(table_2) -->
-<!-- AC_2 = sum(diag(bestMap)) / sum(bestMap) -->
-<!-- paste('Accuracy (%):', AC_2*100) -->
-<!-- ``` -->
-
-<!-- # 3. Spectral clustering computational time {#sec-citations-3} -->
-<!-- ```{r, eval=FALSE} -->
-<!-- rm(list=ls()) -->
-<!-- library('pracma') -->
-<!-- library('Matrix') -->
-<!-- library('sparsesvd') -->
-
-<!-- now <- Sys.time() -->
-<!-- load("mnist.rda") -->
-
-<!-- # data matrix X -->
-<!-- X = mnistTest$x -->
-
-<!-- # True label vector Y -->
-<!-- Y = mnistTest$y -->
-
-<!-- # center the data matrix X -->
-<!-- X <- sweep(X, 2, colMeans(X)) -->
-
-<!-- # Set and parse parameters -->
-<!-- # landmark points p (default=200) -->
-<!-- p = 200 -->
-
-<!-- # number of nearest landmarks (default=2) -->
-<!-- r = 2 -->
-
-<!-- # produce p landmark points (basis vectors) using random selection -->
-<!-- # landmarks_r = X[sample(nrow(X), size=p, replace=FALSE),] -->
-
-<!-- # alternatively, produce p landmark points using k-means -->
-<!-- kmeans_time_p = system.time(kmeans_out_p <- kmeans(X, p)) -->
-<!-- paste('Constructing U with k-means (s):', kmeans_time_p[3]) -->
-<!-- landmarks_k = kmeans_out_p$centers -->
-
-<!-- # calculate the Euclidean distance matrix -->
-<!-- Euclidean_time = system.time(D <- distmat(X, landmarks_k)) -->
-<!-- paste('Constructing D Euclidean distance matrix (s):',   -->
-<!--       Euclidean_time[3]) -->
-
-<!-- # estimate bandwidth h in the kernel function K.  -->
-<!-- sigma = mean(D)  -->
-
-<!-- # construct the sparse representation matrix Z  -->
-<!-- dense = matrix(0, nrow=nrow(X), ncol=r)   -->
-<!-- idx = dense -->
-
-<!-- for (i in 1:r)  -->
-<!--   { -->
-<!--   dense[, i] = apply(D, 1, FUN = min) -->
-<!--   idx[, i] = t(max.col(-D, 'first')) -->
-<!--   temp = (idx[, i]-1)*nrow(X) + matrix(c(1:nrow(X)), nrow=nrow(X)) -->
-<!--   D[temp] = 1e100 -->
-<!--   } -->
-
-<!-- dense = exp(-dense/(2*sigma^2)) -->
-<!-- dense = sweep(dense, 1, rowSums(dense), '/') -->
-<!-- Gidx = do.call(cbind, replicate(r, matrix(c(1:nrow(X)), nrow=nrow(X)), simplify=FALSE)) -->
-<!-- Gjdx = idx -->
-<!-- Z = sparseMatrix(i=c(Gidx), j=c(Gjdx), x=c(dense), dims = c(nrow(X), p)) -->
-
-<!-- # transpose Z to get order p*n -->
-<!-- Z = t(Z) -->
-
-<!-- # compute the inverse sqrt matrix D^(-1/2) -->
-<!-- D_isqrt = .sparseDiagonal(x=rowSums(Z)^(-1/2)) -->
-<!-- Z_hat = D_isqrt %*% Z -->
-
-<!-- # sparse singular value decomposition of Z_hat -->
-<!-- # we use sparsesvd -->
-<!-- SVD_time_sparse = system.time(SVD_spectral <- sparsesvd(Z_hat)) -->
-<!-- paste('sparse eigen-decomposition time (s):', SVD_time_sparse[3]) -->
-
-<!-- # find the first k eigenvectors -->
-<!-- Idc = SVD_spectral$v -->
-<!-- Idc = zapsmall(Idc) -->
-<!-- Idc = Idc[,c(2:11)] -->
-
-<!-- # normalize the rows of Indicators -->
-<!-- Idc = sweep(Idc, 1, sqrt(rowSums(Idc^2)), '/') -->
-
-<!-- # cluster the indicator matrix with k-means -->
-<!-- kmeans_out_spectral = kmeans(Idc, 10) -->
-
-<!-- res <- difftime(Sys.time(), now) -->
-<!-- paste("Time for spectral clustering to run:", res) -->
-
-<!-- # Accuracy test -->
-<!-- gnd = c(Y)-1 -->
-<!-- class = cbind(gnd, kmeans_out_spectral$cluster) -->
-<!-- write.csv(class,  -->
-<!--  file="/Users/jingyuqi/Documents/MATLAB&LaTeX/MATLAB/freefile/M-files folder/class.csv") -->
-<!-- ``` -->
-
-<!-- # 4. Spectral clustering accuracy test {#sec-citations-4} -->
-<!-- ```{r, eval=FALSE} -->
-<!-- # read output from MATLAB -->
-<!-- class_out <- read.csv( -->
-<!--   "/Users/jingyuqi/Documents/MATLAB&LaTeX/class_out.csv", header = TRUE) -->
-<!-- class_out = as.matrix(class_out) -->
-
-<!-- # visualize the accuracy of PCA-based clustering -->
-<!-- table_4 = table(class_out[,1], class_out[,2]) -->
-<!-- colnames(table_4) = c('Res0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
-<!-- rownames(table_4) = c('Gnd0', '1', '2', '3', '4', '5', '6', '7', '8', '9') -->
-<!-- table_4 -->
-
-<!-- # compute the accuracy -->
-<!-- bestMap = as.matrix(table_4) -->
-<!-- AC_2 = sum(diag(bestMap)) / sum(bestMap) -->
-<!-- paste('bestMap(%)', AC_2*100) -->
-<!-- ``` -->
+```
 
 
 \newpage

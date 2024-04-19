@@ -1,8 +1,9 @@
 ---
 title: "Stat 854 Project: Mirror-match Bootstrap"
-author: "..."
+author: "authors"
 date: "April 14 2024"
-output: pdf_document
+output: 
+  pdf_document
 papersize: a4
 urlcolor: blue
 fontsize: 11pt    
@@ -21,21 +22,7 @@ bibliography: references.bib
 \newcommand\bI{\boldsymbol I}
 \newcommand{\bm}[1]{\boldsymbol{\mathbf{#1}}}
 
-
-# Introduction
-
-# Method
-
 # Experiments
-
-# Related Works
-
-# Conclusion
-
-
-
-\newpage
-# Appendix
 
 # 1. We pre-process the syc.txt in SAS, where 
 + we deal with missing values in the 8 variables mentioned in A2Q4 by setting missing values as '.'
@@ -67,17 +54,81 @@ syc <- readr::read_csv(
   col_types = "nn", # Tell it that there are two columns, and they are "numeric" (n)
 )
 
-# glimpse the read data set
-dplyr::glimpse(syc)
-
 # Read the stratum size provided in Assignment 2 Question 4, shape (16, 1)
 N_h_list = c(2724, 3192, 4107, 2705, 3504, 376, 56, 
              528, 624, 520, 672, 384, 744, 847, 824, 1848)
-```
-# 3. We write the function for performing one mirror-match bootstrap for stratum h
-For $n_{h}^{\prime}$, we choose $n_{h}^{\prime} = f_n \times n_h$ advised by author in the paper [@sitter1992comparing], so that the first two moments of the distribution of the bootstrap estimate of $\bar{y}$ match the usual unbiased estimates of the first two moments of $\bar{y}$.  
 
-## Randomization of $n_h$
+# glimpse the read data set
+dplyr::glimpse(syc)
+```
+
+## Extra step: rescaling *finalwt* variable
+As can be seen from the code below, the sum of finalwt in each stratum is different from $N_h$. Therefore, we rescale the finalwt to make the sum of finalwt in each stratum to be equal to N_h, based on the R code provided by Professor Boudreau (here we sincerely thank him for helping us with the project and providing us with the code).  
+
+```{r, eval=TRUE}
+finalwt_h_list = c()
+for (h in 1:16)
+{
+  sub_dataset = syc[syc$stratum == h, ]
+  finalwt_h = sum(sub_dataset$finalwt)
+  finalwt_h_list = c(finalwt_h_list, finalwt_h)
+}
+
+# Comparison
+comparison_df <- data.frame(finalwt_h_sum = finalwt_h_list, N_h = N_h_list)
+print(comparison_df)
+
+# we want the sum of finalwt in each stratum to be equal to N_h
+# therefore, we rescale it
+finalwt2 = c()
+for (h in 1:16)
+{
+  finalwt_h = syc[syc$stratum == h, ]$finalwt
+  N_h = N_h_list[h]
+  finalwt_h_sum = finalwt_h_list[h]
+  finalwt_h = finalwt_h * N_h / finalwt_h_sum
+  finalwt2 = c(finalwt2, finalwt_h)
+}
+
+syc$finalwt = finalwt2
+```
+
+```{r}
+# Make sure rescaling is complete 
+finalwt_h_list = c()
+for (h in 1:16)
+{
+  sub_dataset = syc[syc$stratum == h, ]
+  finalwt_h = sum(sub_dataset$finalwt)
+  finalwt_h_list = c(finalwt_h_list, finalwt_h)
+}
+
+# Comparison
+comparison_df <- data.frame(finalwt_h_sum = finalwt_h_list, N_h = N_h_list)
+print(comparison_df)
+
+```
+
+
+
+
+# 3. We write the function for performing one mirror-match bootstrap for stratum h
+For $n_{h}^{\prime}$, we choose 
+
+\begin{equation} \label{eq:1}
+n_{h}^{\prime} = f_h \times n_h,
+\end{equation}
+
+advised by author in the paper [@sitter1992comparing], where $f_h = \frac{n_h}{N_h}$, so that the first two moments of the distribution of the bootstrap estimate of $\bar{y}$ match the usual unbiased estimates of the first two moments of $\bar{y}$.  
+
+## Selection for $n_{7}^{\prime}$
+However, in the actual implementation, we found that for stratum $7$, the $n_{7}^{\prime}$ computed using Equation $\eqref{eq:1}$ gave us a value that is less than $1$, while the range of $n_{h}^{\prime}$ must be in $[1, n_h)$.  
+
+Therefore, we randomly select the $n_{7}^{\prime}$ among the $\{1, 2\}$ (with equal probability) in each bootstrap independently. For the other $15$ strata, the average value of $n_{h}^{\prime} / n_h$ computed using $\eqref{eq:1}$ is approx. $0.12$. Hence, we choose the range $\{1, 2\}$ to approximate this proportion given $n_{7}$ is 7.  
+
+Other than stratum 7, the $n_{h}^{\prime}$ of all the other strata calculated using Equation $\eqref{eq:1}$ works well and is in the range $[1, n_h)$.  
+
+## Randomization of $n_{h}^{\prime}$
 For stratum $h$ in each bootstrap, the $n_{h}^{\prime}$ is a random variable with discrete distribution across \{$n_{h, floor}^{\prime}$, $n_{h, ceil}^{\prime}$ \} whose pmf is given below:
 $$
 Pr(n_{h}^{\prime} = n_{h, floor}^{\prime}) = n_{h, ceil}^{\prime} - n_{h}^{\prime} = p,
@@ -139,7 +190,7 @@ mirror_match_bootstrap_h = function(dataset, N_h_list, h)
   # get random integer n_h_prime by applying random_n_h_prime if it is not integer
   if (!n_h_prime %% 1 == 0)
   {
-    n_h_prime = random_n_h_prime(n_h_prime, n_h)
+    n_h_prime = random_n_h_prime(n_h_prime, n_h, h)
   }
   # compute k_h
   k_h = get_k_h(n_h, n_h_prime, N_h)
@@ -206,7 +257,7 @@ get_k_h = function(n_h, n_h_prime, N_h)  # compute the k_h, the number of resamp
   return(k_h)
 }
 
-random_n_h_prime = function(n_h_prime, n_h)  # randomization for k_h
+random_n_h_prime = function(n_h_prime, n_h, h)  # randomization for k_h
 {
   # make sure n_h_prime is in the proper range
   if (n_h_prime >= 1 && n_h_prime < n_h)
@@ -225,18 +276,14 @@ random_n_h_prime = function(n_h_prime, n_h)  # randomization for k_h
     n_h_prime = sample(c(n_h_prime_floor, n_h_prime_ceil), 1, prob = c(p_floor, p_ceil))
     return(n_h_prime)
   }
+  else if (h == 7)
+  {
+    n_h_prime = sample(c(1, 2), 1)
+    return(n_h_prime)
+  }
   else
   {
-    # if n_h_prime is less than 1, assign it as 1
-    if (n_h_prime < 1)
-    {
-      n_h_prime = 1
-      return(n_h_prime)
-    }
-    else
-    {
-      stop(paste("n_h_prime must be larger than or equal to 1 and less than n_h, however got", n_h_prime))
-    }
+    stop(paste("n_h_prime must be larger than or equal to 1 and less than n_h, however got", n_h_prime))
   }
 }
 
@@ -335,6 +382,7 @@ mirror_match_bootstrap_B = function(dataset, N_h_list, B = 100, stratum_list = s
   }
    bootstrap_weights_matrix = as.data.frame(bootstrap_weights_matrix)
    names(bootstrap_weights_matrix) = c("stratum", paste0("w", 1:100))
+   bootstrap_weights_matrix = subset(bootstrap_weights_matrix, select = -stratum)
   return(bootstrap_weights_matrix)
 }
 
@@ -344,6 +392,11 @@ write.csv(m, "data/bootstrap_weights_matrix.csv", row.names = FALSE)
 
 
 ```
+
+
+# Appendices
+
+
 
 
 \newpage

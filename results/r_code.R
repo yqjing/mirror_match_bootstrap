@@ -1,53 +1,3 @@
----
-title: "Stat 854 Project: Mirror-match Bootstrap"
-author: "authors"
-date: "April 14 2024"
-output: 
-  pdf_document
-papersize: a4
-urlcolor: blue
-fontsize: 11pt    
-fontfamily: mathpple
-bibliography: references.bib
----
-
-
-
-\newcommand\bx{\boldsymbol x}
-\newcommand\btheta{\boldsymbol \theta}
-\newcommand\bSigma{\boldsymbol \Sigma}
-\newcommand\bmu{\boldsymbol \mu}
-\newcommand\expect{\text{E}}
-\newcommand\prob{\text{Pr}}
-\newcommand\bI{\boldsymbol I}
-\newcommand{\bm}[1]{\boldsymbol{\mathbf{#1}}}
-
-# Experiments
-
-# 1. We pre-process the syc.txt in SAS, where 
-+ we deal with missing values in the 8 variables mentioned in A2Q4 by setting missing values as '.'
-+ we keep only the necessary columns, i.e. the 8 variables mentioned in A2Q4
-+ sort the dataset by stratum in an ascending order
-+ export a syc dataset called syc_sas.csv with 8 variables for calculation in SAS
-+ export another syc dataset call syc_r.csv with 2 variables (stratum, finalwt) for computing bootstrap weight in R
-
-In addition, PROC FREQ is used to generate frequency counts for the stratum variable.   
-
-
-## SAS code 
-```{r echo=FALSE, fig.align='left', out.width = "100%"}
-knitr::include_graphics("figures/sas_1.pdf")
-
-``` 
-
-## SAS output
-```{r echo=FALSE, fig.align='center', out.width = "120%"}
-knitr::include_graphics("figures/sas_2.pdf")
-
-``` 
-
-# 2. We read in the syc in R and log the $N_h$ information provided in A2Q4
-```{r, eval=TRUE, echo=TRUE}
 # Read in the Survey of Youth in Custody
 syc <- readr::read_csv(
   file = "data/syc_r.csv", # Tell it where the file is
@@ -60,12 +10,9 @@ N_h_list = c(2724, 3192, 4107, 2705, 3504, 376, 56,
 
 # glimpse the read data set
 dplyr::glimpse(syc)
-```
 
-## Extra step: rescaling *finalwt* variable
-As can be seen from the code below, the sum of finalwt in each stratum is different from $N_h$. Therefore, we rescale the finalwt to make the sum of finalwt in each stratum to be equal to N_h, based on the R code provided by Professor Boudreau (here we sincerely thank him for helping us with the project and providing us with the code).  
-
-```{r, eval=TRUE}
+# Extra step: rescaling *finalwt* variable
+# As can be seen from the code below, the sum of finalwt in each stratum is different from $N_h$. Therefore, we rescale the finalwt to make the sum of finalwt in each stratum to be equal to N_h, based on the R code provided by Professor Boudreau (here we sincerely thank him for helping us with the project and providing us with the code).  
 
 # compute the sum of finalwt in each stratum
 finalwt_h_list = c()
@@ -94,30 +41,7 @@ for (h in 1:16)
 syc$finalwt = finalwt2
 
 print(sum(syc$finalwt))
-```
-```{r, eval = FALSE, echo = TRUE}
-# substitute finalwt2 to finalwt in syc_sas.csv
-syc_sas <- readr::read_csv(
-  file = "data/syc_sas.csv", # Tell it where the file is
-  col_types = "nnnnnnnn", # Tell it that there are two columns, and they are "numeric" (n)
-)
 
-syc_sas$finalwt = finalwt2
-
-write.csv(syc_sas, "data/syc_sas.csv", row.names = FALSE)
-syc_sas
-
-```
-
-
-
-
-
-
-
-
-
-```{r}
 # Make sure rescaling is complete 
 finalwt_h_list = c()
 for (h in 1:16)
@@ -131,57 +55,8 @@ for (h in 1:16)
 comparison_df <- data.frame(finalwt_h_sum = finalwt_h_list, N_h = N_h_list)
 print(comparison_df)
 
-```
-
-
-
-
-# 3. We write the function for performing one mirror-match bootstrap for stratum h
-For $n_{h}^{\prime}$, we choose 
-
-\begin{equation} \label{eq:1}
-n_{h}^{\prime} = f_h \times n_h,
-\end{equation}
-
-advised by author in the paper [@sitter1992comparing], where $f_h = \frac{n_h}{N_h}$, so that the first two moments of the distribution of the bootstrap estimate of $\bar{y}$ match the usual unbiased estimates of the first two moments of $\bar{y}$.  
-
-## Selection for $n_{7}^{\prime}$
-However, in the actual implementation, we found that for stratum $7$, the $n_{7}^{\prime}$ computed using Equation $\eqref{eq:1}$ gave us a value that is less than $1$, while the range of $n_{h}^{\prime}$ must be in $[1, n_h)$.  
-
-Therefore, we randomly select the $n_{7}^{\prime}$ among the $\{1, 2\}$ (with equal probability) in each bootstrap independently. For the other $15$ strata, the average value of $n_{h}^{\prime} / n_h$ computed using $\eqref{eq:1}$ is approx. $0.12$. Hence, we choose the range $\{1, 2\}$ to approximate this proportion given $n_{7}$ is 7.  
-
-Other than stratum 7, the $n_{h}^{\prime}$ of all the other strata calculated using Equation $\eqref{eq:1}$ works well and is in the range $[1, n_h)$.  
-
-## Randomization of $n_{h}^{\prime}$
-For stratum $h$ in each bootstrap, the $n_{h}^{\prime}$ is a random variable with discrete distribution across \{$n_{h, floor}^{\prime}$, $n_{h, ceil}^{\prime}$ \} whose pmf is given below:
-$$
-Pr(n_{h}^{\prime} = n_{h, floor}^{\prime}) = n_{h, ceil}^{\prime} - n_{h}^{\prime} = p,
-$$
-and $Pr(n_{h}^{\prime} = n_{h, ceil}^{\prime})$ is:
-$$
-Pr(n_{h}^{\prime} = n_{h, ceil}^{\prime}) = 1 - p,
-$$
-where $n_{h, floor}^{\prime}$ is equal to `floor(n_h_prime)` in R; $n_{h, ceil}^{\prime}$ is equal to `ceiling(n_h_prime)` in R.  
-The randomization is done at the beginning of a bootstrap for each stratum $h$ independently and repeated at each bootstrap as described in the paper [@sitter1992resampling].  
-
-
-
-## Randomization of $k_h$
-For stratum $h$ in each bootstrap, given the value of $n_{h}^{\prime}$ obtained in the randomization above, the $k_h$ is a random variable with discrete distribution across \{$k_{h, floor}$, $k_{h, ceil}$\} whose pmf is described below:
-$$
-Pr(k_h = k_{h, floor}) = \frac{\bigg( \frac{1}{k_h} - \frac{1}{k_{h, ceil}}\bigg) }{\bigg( \frac{1}{k_{h, floor}} - \frac{1}{k_{h, ceil}} \bigg)} = p_h,
-$$
-and $Pr(k_h = k_{h, ceil})$ is:
-$$
-Pr(k_h = k_{h, ceil}) = 1 - p_h,
-$$
-where $k_{h, floor}$ is equal to `floor(k_h)` in R; $k_{h, ceil}$ is equal to `ceiling(k_h)` in R.  
-The randomization is done independently for each stratum $h$ and repeated at each bootstrap as described in the paper [@sitter1992resampling].  
-
-
-
-```{r, eval=TRUE, echo=TRUE}
 mirror_match_bootstrap_h = function(dataset, N_h_list, h)
+{
   # Perform one mirror-match bootstrap for stratum h
   # parameters
   # ---------
@@ -199,8 +74,7 @@ mirror_match_bootstrap_h = function(dataset, N_h_list, h)
   # bootstrap_weights : vector
   #   bootstrap weights for the sample units in the stratum (from 1 to n_h)
   #   shape (n_h, 1)
-
-{
+  
   # get the stra_weights df, shape is (n_h, 2)
   stra_weights_df = get_stratum(dataset, h)
   # get the stra_weights vector, shape is (n_h, 1)
@@ -336,13 +210,6 @@ random_k_h = function(k_h)  # randomization for k_h
   }
 }
 
-weights = mirror_match_bootstrap_h(syc, N_h_list, 3)
-weights
-
-```
-# 4. We perform one complete bootstrap for the sample of size $n$. Specifically, we perform bootstrap for all the 16 strata in the sample. 
-
-```{r, eval = TRUE, echo = TRUE}
 mirror_match_bootstrap_full = function(dataset, N_h_list, stratum_list = seq(1, 16))
 {
   # Perform one full mirror-match bootstrap for 16 strata
@@ -363,7 +230,7 @@ mirror_match_bootstrap_full = function(dataset, N_h_list, stratum_list = seq(1, 
   # bootstrap_weights : vector
   #   bootstrap weights for the full sample of size n consisting of 16 strata
   #   shape (n, 1)
-
+  
   # compute the sample size n
   n = dim(dataset)[1]
   # create an empty vector for storing bootstrap weights
@@ -387,55 +254,30 @@ mirror_match_bootstrap_full = function(dataset, N_h_list, stratum_list = seq(1, 
   }
 }
 
-a = mirror_match_bootstrap_full(syc, N_h_list)
-dplyr::glimpse(a)
-
-
-```
-
-# 5. Finally, we obtain the bootstrap weight matrix by repeating the full bootstrap B times. Bootstrap weight matrix has shape ($n$, B). 
-```{r, eval = TRUE, echo = TRUE}
-mirror_match_bootstrap_B = function(dataset, N_h_list, B = 100, stratum_list = seq(1, 16))
+mirror_match_bootstrap_B = function(dataset, N_h_list, B = 100, stratum_list = seq(1, 16))  # function for repeating the full bootstrap B times
 {
-  stratum_vector = dataset$stratum
+  # stratum vector
+  stratum_vector = dataset$stratum  
   bootstrap_weights_matrix = stratum_vector
+  # repeat the bootstrap B times
   for (exp in 1:B)
   {
+    # perform the mirror_match_bootstrap_full function
     bootstrap_weights_vector = mirror_match_bootstrap_full(dataset, N_h_list)
+    # append the newly obtained bootstrap weight as a new column of bootstrap_weights_matrix
     bootstrap_weights_matrix = cbind(bootstrap_weights_matrix, bootstrap_weights_vector)
   }
-   bootstrap_weights_matrix = as.data.frame(bootstrap_weights_matrix)
-   names(bootstrap_weights_matrix) = c("stratum", paste0("w", 1:100))
+  # convert the bootstrap_weights_matrix to data frame
+  bootstrap_weights_matrix = as.data.frame(bootstrap_weights_matrix)
+  # assign the column names
+  names(bootstrap_weights_matrix) = c("stratum", paste0("w", 1:100))
+  # delete the stratum column since we only need the bootstrap weights
+  bootstrap_weights_matrix = subset(bootstrap_weights_matrix, select = -stratum)
   return(bootstrap_weights_matrix)
 }
 
+# apply the function to the syc dataset, m : data.frame
 m <- mirror_match_bootstrap_B(syc, N_h_list)
 dplyr::glimpse(m)
+# save the bootstrap weights
 write.csv(m, "data/bootstrap_weights_matrix.csv", row.names = FALSE)
-
-
-```
-
-
-# Appendices
-
-
-
-
-\newpage
-# References
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -417,11 +417,6 @@ write.csv(m, "data/bootstrap_weights_matrix.csv", row.names = FALSE)
 ```
 
 
-# Appendices
-
-
-
-
 \newpage
 # References
   

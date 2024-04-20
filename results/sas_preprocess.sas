@@ -22,13 +22,13 @@ data SYC;
     label finalwt = "final sampling weight";
    
     /* Change the missing values to . for those variables whose missing values is 9*/
-   	array missing_ls_1 race sex numarr prviol everdrug;
+   	array missing_ls_1 race sex prviol everdrug;
    	do over missing_ls_1;
    		if (missing_ls_1 = 9) then missing_ls_1 = .;
    	end;
    	
    	/* Change the missing values to . for those variables whose missing values is 99*/
-   	array missing_ls_2 age;
+   	array missing_ls_2 age numarr;
    	do over missing_ls_2;
    		if (missing_ls_2 = 99) then missing_ls_2 = .;
    	end;
@@ -69,6 +69,15 @@ run;
 ods pdf file='/home/u63744989/figures/output_1.pdf'; 
 
 ods _all_ close;
+
+
+
+
+
+
+
+
+
 
 
 
